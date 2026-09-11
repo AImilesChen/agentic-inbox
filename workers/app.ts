@@ -61,6 +61,15 @@ app.use("*", async (c, next) => {
 
 	const token = c.req.header("cf-access-jwt-assertion");
 	if (!token) {
+		// Service bindings never get an Access JWT or cf-ray. Public edge always has cf-ray.
+		const isServiceBinding = !c.req.header("cf-ray");
+		const path = new URL(c.req.url).pathname;
+		const isSendApi =
+			c.req.method === "POST" &&
+			/^\/api\/v1\/mailboxes\/[^/]+\/emails$/.test(path);
+		if (isServiceBinding && isSendApi) {
+			return next();
+		}
 		return c.text("Missing required CF Access JWT", 403);
 	}
 
@@ -101,10 +110,15 @@ app.all("/agents/*", async (c) => {
 });
 
 // React Router catch-all: serves the SPA for all non-API routes
-app.all("*", (c) => {
-	return requestHandler(c.req.raw, {
+app.all("*", async (c) => {
+	const res = await requestHandler(c.req.raw, {
 		cloudflare: { env: c.env, ctx: c.executionCtx as ExecutionContext },
 	});
+	const contentType = res.headers.get("content-type") || "";
+	if (!contentType.includes("text/html")) return res;
+	const headers = new Headers(res.headers);
+	headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+	return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 });
 
 // Export the Hono app as the default export with an email handler
