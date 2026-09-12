@@ -306,6 +306,20 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	if (rateLimitError) return c.json({ error: rateLimitError }, 429);
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
+	// Wait for the provider before recording this message as sent.
+	try {
+		const delivery = await sendEmail(c.env.EMAIL, {
+			to, cc, bcc, from, subject, html, text,
+			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
+			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
+		});
+		console.info("Email accepted by provider:", delivery.messageId);
+	} catch (error) {
+		const failure = error as Error & { code?: string };
+		console.error("Email sending failed:", failure.code, failure.message);
+		return c.json({ error: `邮件发送失败：${failure.code || ""} ${failure.message || "发信服务未接受邮件"}`.trim() }, 502);
+	}
+
 	await stub.createEmail(Folders.SENT, {
 		id: messageId, subject, sender: fromEmail, recipient: toStr,
 		cc: cc ? (Array.isArray(cc) ? cc.join(", ") : cc).toLowerCase() : null,
@@ -323,14 +337,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		]),
 	}, attachmentData);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to, cc, bcc, from, subject, html, text,
-			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
-			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
-	);
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 201);
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
