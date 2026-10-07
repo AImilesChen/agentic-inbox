@@ -264,6 +264,10 @@ app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
 
 // -- Emails ---------------------------------------------------------
 
+app.post("/api/v1/mailboxes/:mailboxId/inbox/read", async (c: AppContext) => {
+	return c.json(await c.var.mailboxStub.markInboxRead());
+});
+
 app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const folder = c.req.query("folder");
 	const thread_id = c.req.query("thread_id");

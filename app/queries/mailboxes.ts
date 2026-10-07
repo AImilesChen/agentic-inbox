@@ -22,6 +22,18 @@ export function useUnreadSummary() {
 	});
 }
 
+export function useMarkInboxRead() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (mailboxId: string) => api.markInboxRead(mailboxId),
+		onSuccess: (_result, mailboxId) => {
+			qc.invalidateQueries({ queryKey: [...queryKeys.mailboxes.all, "unread-summary"] });
+			qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
+			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
+		},
+	});
+}
+
 export function useMailbox(mailboxId: string | undefined) {
 	return useQuery<Mailbox>({
 		queryKey: mailboxId

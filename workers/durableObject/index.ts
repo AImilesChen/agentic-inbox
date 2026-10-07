@@ -534,6 +534,19 @@ export class MailboxDO extends DurableObject<Env> {
 		return { threadId, markedRead: true };
 	}
 
+	async markInboxRead(): Promise<{ markedRead: number }> {
+		this.ctx.storage.sql.exec(
+			`UPDATE emails SET read = 1
+			 WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
+			   AND read = 0`,
+			Folders.INBOX,
+		);
+		const row = [...this.ctx.storage.sql.exec("SELECT changes() AS count")][0] as
+			| { count: number }
+			| undefined;
+		return { markedRead: row?.count ?? 0 };
+	}
+
 	async deleteEmail(id: string) {
 		const email = this.db
 			.select({ id: schema.emails.id })

@@ -12,7 +12,7 @@ import {
 	Text,
 	useKumoToastManager,
 } from "@cloudflare/kumo";
-import { EnvelopeIcon, GlobeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { EnvelopeIcon, EnvelopeOpenIcon, GlobeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
@@ -21,6 +21,7 @@ import {
 	useCreateMailbox,
 	useDeleteMailbox,
 	useMailboxes,
+	useMarkInboxRead,
 	useUnreadSummary,
 } from "~/queries/mailboxes";
 import { useAddDomain, useSignatureTemplate, useUpdateSignatureTemplate } from "~/queries/settings";
@@ -52,6 +53,7 @@ export default function HomeRoute() {
 	const { data: unreadSummary = [] } = useUnreadSummary();
 	const createMailbox = useCreateMailbox();
 	const deleteMailbox = useDeleteMailbox();
+	const markInboxRead = useMarkInboxRead();
 
 	const { data: configData } = useQuery({
 		queryKey: queryKeys.config,
@@ -197,6 +199,15 @@ export default function HomeRoute() {
 			toastManager.add({ title: "删除邮箱失败", variant: "error" });
 		} finally {
 			setIsDeleting(false);
+		}
+	};
+
+	const handleMarkInboxRead = async (mailboxId: string) => {
+		try {
+			const result = await markInboxRead.mutateAsync(mailboxId);
+			toastManager.add({ title: `已将 ${result.markedRead} 封收件箱邮件标为已读` });
+		} catch {
+			toastManager.add({ title: "标为已读失败，请重试", variant: "error" });
 		}
 	};
 
@@ -367,6 +378,22 @@ export default function HomeRoute() {
 											{account.email}
 										</div>
 									</div>
+									{unreadCount > 0 && (
+										<Button
+											variant="secondary"
+											size="sm"
+											icon={<EnvelopeOpenIcon size={16} />}
+											aria-label={`将 ${account.email} 收件箱全部标为已读`}
+											disabled={markInboxRead.isPending}
+											onClick={(e) => {
+												e.preventDefault();
+												e.stopPropagation();
+												void handleMarkInboxRead(account.id);
+											}}
+										>
+											全部标为已读
+										</Button>
+									)}
 									<Button
 										variant="ghost"
 										size="sm"
