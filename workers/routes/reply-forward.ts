@@ -54,6 +54,24 @@ export async function handleReplyEmail(c: AppContext) {
 	}
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	try {
+		const delivery = await sendEmail(c.env.EMAIL, {
+			to, cc, bcc, from, subject, html, text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+			headers: buildThreadingHeaders(originalMsgId, references),
+		});
+		console.info("Reply accepted by provider:", delivery.messageId);
+	} catch (error) {
+		const failure = error as Error & { code?: string };
+		console.error("Reply delivery failed:", failure.code, failure.message);
+		return c.json({ error: `回复发送失败：${failure.code || ""} ${failure.message || "发信服务未接受邮件"}`.trim() }, 502);
+	}
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -86,30 +104,7 @@ export async function handleReplyEmail(c: AppContext) {
 	);
 
 	await stub.markThreadRead(thread_id);
-
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-			headers: buildThreadingHeaders(originalMsgId, references),
-		}).catch((e) => {
-			console.error("Deferred reply delivery failed:", (e as Error).message);
-		}),
-	);
-
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 201);
 }
 
 export async function handleForwardEmail(c: AppContext) {
@@ -144,6 +139,23 @@ export async function handleForwardEmail(c: AppContext) {
 	}
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
+	try {
+		const delivery = await sendEmail(c.env.EMAIL, {
+			to, cc, bcc, from, subject, html, text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+		});
+		console.info("Forward accepted by provider:", delivery.messageId);
+	} catch (error) {
+		const failure = error as Error & { code?: string };
+		console.error("Forward delivery failed:", failure.code, failure.message);
+		return c.json({ error: `转发发送失败：${failure.code || ""} ${failure.message || "发信服务未接受邮件"}`.trim() }, 502);
+	}
 
 	await stub.createEmail(
 		Folders.SENT,
@@ -173,26 +185,5 @@ export async function handleForwardEmail(c: AppContext) {
 		attachmentData,
 	);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-		}).catch((e) => {
-			console.error("Deferred forward delivery failed:", (e as Error).message);
-		}),
-	);
-
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 201);
 }
